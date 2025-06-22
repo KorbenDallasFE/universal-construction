@@ -9,12 +9,12 @@ COPY frontend/ ./
 RUN npm run build
 
 # 2. Сборка Go-бэкенда
-FROM golang:1.21 AS backend
+FROM golang:1.22.2 AS backend
 WORKDIR /app
 
 # Копируем go.mod и go.sum из корня репозитория
 COPY go.mod go.sum ./
-RUN go mod download
+RUN GOTOOLCHAIN=auto go mod download
 
 # Копируем исходники бэкенда
 COPY backend/ ./backend/
