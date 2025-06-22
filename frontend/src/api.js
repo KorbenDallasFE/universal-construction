@@ -1,11 +1,14 @@
 // api.js
 
-const BASE_URL = 'http://localhost:3300/api'
+const BASE_URL = import.meta.env.PROD
+    ? '/api'
+    : 'http://localhost:3300/api'
 
 export async function getMessage() {
     const res = await fetch(`${BASE_URL}/message`)
     return res.json()
 }
+
 
 export async function sendName(name) {
     const res = await fetch(`${BASE_URL}/hello`, {
