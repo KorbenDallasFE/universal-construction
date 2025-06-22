@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Update Name</title>
+</head>
+<body>
+  <h1>Update Name</h1>
+  <form id="updateForm">
+    <label>
+      Old Name:
+      <input type="text" name="oldName" required>
+    </label><br><br>
+    <label>
+      New Name:
+      <input type="text" name="newName" required>
+    </label><br><br>
+    <button type="submit">Update</button>
+  </form>
+
+  <pre id="result"></pre>
+
+  <script>
+    const form = document.getElementById('updateForm');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const data = {
+        oldName: form.oldName.value,
+        newName: form.newName.value
+      };
+
+      const res = await fetch('http://localhost:3000/api/update', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+
+      const text = await res.text();
+      document.getElementById('result').textContent = text;
+    });
+  </script>
+</body>
+</html>
+
