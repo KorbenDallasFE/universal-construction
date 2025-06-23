@@ -13,18 +13,16 @@ function App() {
     const [name, setName] = useState('')
     const [reply, setReply] = useState('')
     const [names, setNames] = useState([])
-    const [editingIndex, setEditingIndex] = useState(null)
+    const [editingId, setEditingId] = useState(null)
     const [newName, setNewName] = useState('')
     const [errorName, setErrorName] = useState('')
     const [errorEditName, setErrorEditName] = useState('')
-    const [sortBy, setSortBy] = useState('dateDesc') // по умолчанию сортируем по дате убыванию
+    const [sortBy, setSortBy] = useState('dateDesc')
     const [sendCount, setSendCount] = useState(0)
-
 
     const fetchNames = async () => {
         try {
             const data = await getAllNames()
-            console.log('Полученные имена:', data)
             setNames(Array.isArray(data) ? data : [])
         } catch (err) {
             console.error('Ошибка при получении имён:', err)
@@ -58,12 +56,11 @@ function App() {
             setName('')
             setErrorName('')
             fetchNames()
-            setSendCount(prev => prev + 1)  // Увеличиваем счётчик отправок
+            setSendCount(prev => prev + 1)
         } catch (err) {
             setReply('Ошибка при отправке')
         }
     }
-
 
     const handleClear = async () => {
         try {
@@ -75,24 +72,26 @@ function App() {
         }
     }
 
-    const startEditing = (index) => {
-        setEditingIndex(index)
-        setNewName(names[index].name)
+    const startEditing = (id, currentName) => {
+        setEditingId(id)
+        setNewName(currentName)
         setErrorEditName('')
     }
 
     const saveNewName = async () => {
-        const oldName = names[editingIndex].name
         const trimmed = newName.trim()
         if (!trimmed || trimmed.length < 2) {
             setErrorEditName("Новое имя должно содержать хотя бы 2 символа")
             return
         }
 
+        const currentItem = names.find((n) => n.id === editingId)
+        if (!currentItem) return
+
         try {
-            const data = await updateName(oldName, trimmed)
+            const data = await updateName(currentItem.name, trimmed)
             setReply(data.message)
-            setEditingIndex(null)
+            setEditingId(null)
             setNewName('')
             setErrorEditName('')
             fetchNames()
@@ -101,7 +100,6 @@ function App() {
         }
     }
 
-    // --- Шаг 3: сортируем имена согласно выбранному параметру sortBy ---
     const sortedNames = [...names].sort((a, b) => {
         switch (sortBy) {
             case 'dateAsc':
@@ -150,7 +148,6 @@ function App() {
                 <p>Количество успешных отправок в этой сессии: <strong>{sendCount}</strong></p>
             </div>
 
-            {/* --- Шаг 2: селектор сортировки --- */}
             <div style={{ marginTop: '1rem' }}>
                 <label>Сортировка: </label>
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
@@ -161,9 +158,8 @@ function App() {
                 </select>
             </div>
 
-            {/* --- Шаг 4: используем sortedNames.map вместо names.map --- */}
             <ul>
-                {sortedNames.map((n, i) => {
+                {sortedNames.map((n) => {
                     const formattedDate = new Date(n.created_at).toLocaleString('ru-RU', {
                         day: '2-digit',
                         month: '2-digit',
@@ -174,7 +170,7 @@ function App() {
 
                     return (
                         <li key={n.id}>
-                            {editingIndex === i ? (
+                            {editingId === n.id ? (
                                 <>
                                     <input
                                         type="text"
@@ -193,7 +189,7 @@ function App() {
                                     <span style={{ marginLeft: '1rem', color: '#666', fontSize: '0.9em' }}>
                                         {formattedDate}
                                     </span>
-                                    <button style={{ marginLeft: '1rem' }} onClick={() => startEditing(i)}>
+                                    <button style={{ marginLeft: '1rem' }} onClick={() => startEditing(n.id, n.name)}>
                                         ✏️
                                     </button>
                                 </>
