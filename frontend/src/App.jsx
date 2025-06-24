@@ -8,18 +8,21 @@ import {
     updateName,
 } from './api'
 
+// Главный компонент приложения
 function App() {
-    const [message, setMessage] = useState('')
-    const [name, setName] = useState('')
-    const [reply, setReply] = useState('')
-    const [names, setNames] = useState([])
-    const [editingId, setEditingId] = useState(null)
-    const [newName, setNewName] = useState('')
-    const [errorName, setErrorName] = useState('')
-    const [errorEditName, setErrorEditName] = useState('')
-    const [sortBy, setSortBy] = useState('dateDesc')
-    const [sendCount, setSendCount] = useState(0)
+    // ==== Состояния приложения (useState) ====
+    const [message, setMessage] = useState('')             // Сообщение от сервера
+    const [name, setName] = useState('')                   // Введённое имя для отправки
+    const [reply, setReply] = useState('')                 // Ответ от сервера после действий
+    const [names, setNames] = useState([])                 // Список всех имён из базы
+    const [editingId, setEditingId] = useState(null)       // ID имени, которое сейчас редактируется
+    const [newName, setNewName] = useState('')             // Новое значение имени при редактировании
+    const [errorName, setErrorName] = useState('')         // Ошибка при валидации отправки имени
+    const [errorEditName, setErrorEditName] = useState('') // Ошибка при редактировании имени
+    const [sortBy, setSortBy] = useState('dateDesc')       // Критерий сортировки списка
+    const [sendCount, setSendCount] = useState(0)          // Счётчик успешных отправок в текущей сессии
 
+    // ==== Получение имён из базы ====
     const fetchNames = async () => {
         try {
             const data = await getAllNames()
@@ -30,10 +33,36 @@ function App() {
         }
     }
 
+    // ==== Эффект при монтировании ====
     useEffect(() => {
+        // 1. Загружаем начальные имена
         fetchNames()
+
+        // 2. Подключение к WebSocket серверу
+        const socket = new WebSocket("ws://localhost:8080/ws")
+
+        // 3. Получаем данные по каналу WebSocket (ожидаем обновления имён)
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data)
+                setNames(Array.isArray(data) ? data : [])
+            } catch (err) {
+                console.error("WebSocket JSON parse error", err)
+            }
+        }
+
+        // 4. Логируем отключение
+        socket.onclose = () => {
+            console.log("WebSocket closed")
+        }
+
+        // 5. Очистка соединения при размонтировании
+        return () => {
+            socket.close()
+        }
     }, [])
 
+    // ==== Получить приветственное сообщение от сервера ====
     const handleGetMessage = async () => {
         try {
             const data = await getMessage()
@@ -43,6 +72,7 @@ function App() {
         }
     }
 
+    // ==== Отправить имя на сервер ====
     const handleSendName = async () => {
         const trimmed = name.trim()
         if (!trimmed || trimmed.length < 2) {
@@ -55,29 +85,32 @@ function App() {
             setReply(data.message)
             setName('')
             setErrorName('')
-            fetchNames()
             setSendCount(prev => prev + 1)
+            // Обновление придёт через WebSocket — ручной fetch не нужен
         } catch (err) {
             setReply('Ошибка при отправке')
         }
     }
 
+    // ==== Удалить все имена из базы ====
     const handleClear = async () => {
         try {
             const data = await deleteAllNames()
             setReply(data.message)
-            setNames([])
+            // WebSocket пришлёт обновлённый список
         } catch (err) {
             setReply('Ошибка при очистке')
         }
     }
 
+    // ==== Начать редактирование имени ====
     const startEditing = (id, currentName) => {
         setEditingId(id)
         setNewName(currentName)
         setErrorEditName('')
     }
 
+    // ==== Сохранить новое имя ====
     const saveNewName = async () => {
         const trimmed = newName.trim()
         if (!trimmed || trimmed.length < 2) {
@@ -94,12 +127,13 @@ function App() {
             setEditingId(null)
             setNewName('')
             setErrorEditName('')
-            fetchNames()
+            // WebSocket обновит список
         } catch (err) {
             setReply('Ошибка при обновлении')
         }
     }
 
+    // ==== Сортировка списка имён ====
     const sortedNames = [...names].sort((a, b) => {
         switch (sortBy) {
             case 'dateAsc':
@@ -115,15 +149,18 @@ function App() {
         }
     })
 
+    // ==== Отрисовка интерфейса ====
     return (
         <div style={{ padding: '2rem', fontFamily: 'Arial' }}>
             <h1>React + Go Demo</h1>
 
+            {/* Кнопка для получения приветственного сообщения */}
             <button onClick={handleGetMessage}>Получить сообщение от сервера</button>
             <p>{message}</p>
 
             <hr />
 
+            {/* Поле ввода имени и отправка */}
             <input
                 type="text"
                 placeholder="Ваше имя"
@@ -139,15 +176,24 @@ function App() {
 
             <hr />
 
-            <button onClick={fetchNames}>Показать все имена</button>
+            {/* Управление базой: обновление и очистка */}
+            <button onClick={fetchNames}>Обновить список вручную</button>
             <button onClick={handleClear}>Очистить базу</button>
 
-            <div style={{ marginTop: '1rem', border: '1px solid #ccc', padding: '1rem', borderRadius: '8px', backgroundColor: '#f9f9f9' }}>
+            {/* Информационный блок */}
+            <div style={{
+                marginTop: '1rem',
+                border: '1px solid #ccc',
+                padding: '1rem',
+                borderRadius: '8px',
+                backgroundColor: '#f9f9f9'
+            }}>
                 <h3>Мини-админка</h3>
                 <p>Всего имён в базе: <strong>{names.length}</strong></p>
                 <p>Количество успешных отправок в этой сессии: <strong>{sendCount}</strong></p>
             </div>
 
+            {/* Сортировка списка */}
             <div style={{ marginTop: '1rem' }}>
                 <label>Сортировка: </label>
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
@@ -158,6 +204,7 @@ function App() {
                 </select>
             </div>
 
+            {/* Список имён */}
             <ul>
                 {sortedNames.map((n) => {
                     const formattedDate = new Date(n.created_at).toLocaleString('ru-RU', {
@@ -171,6 +218,7 @@ function App() {
                     return (
                         <li key={n.id}>
                             {editingId === n.id ? (
+                                // Режим редактирования имени
                                 <>
                                     <input
                                         type="text"
@@ -184,12 +232,16 @@ function App() {
                                     {errorEditName && <p style={{ color: 'red' }}>{errorEditName}</p>}
                                 </>
                             ) : (
+                                // Обычный режим отображения имени
                                 <>
                                     <strong>{n.name}</strong>
                                     <span style={{ marginLeft: '1rem', color: '#666', fontSize: '0.9em' }}>
                                         {formattedDate}
                                     </span>
-                                    <button style={{ marginLeft: '1rem' }} onClick={() => startEditing(n.id, n.name)}>
+                                    <button
+                                        style={{ marginLeft: '1rem' }}
+                                        onClick={() => startEditing(n.id, n.name)}
+                                    >
                                         ✏️
                                     </button>
                                 </>

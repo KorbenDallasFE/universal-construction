@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: uc-backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - backend-data:/app/names
+    working_dir: /app
+    command: ["./server"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: uc-frontend
+    ports:
+      - "5173:5173"
+    working_dir: /app
+    command: ["npm", "run", "dev"]
+    volumes:
+      - ./frontend:/app
+    environment:
+      - HOST=0.0.0.0
+
+volumes:
+  backend-data:

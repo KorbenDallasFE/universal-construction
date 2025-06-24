@@ -7,11 +7,27 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 
+	"github.com/gorilla/websocket"
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// --- WebSocket Globals ---
+var clients = make(map[*websocket.Conn]bool)
+var broadcast = make(chan []Name)
+var upgrader = websocket.Upgrader{}
+var clientsMu sync.Mutex
+
+// --- DB ---
 var db *sql.DB
+
+// --- Тип для имени ---
+type Name struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"created_at"`
+}
 
 func main() {
 	var err error
@@ -36,7 +52,10 @@ func main() {
 	http.HandleFunc("/api/update", enableCORS(updateNameHandler))
 	http.HandleFunc("/api/delete", enableCORS(deleteAllHandler))
 
-	// OPTIONS для CORS preflight
+	// WebSocket маршрут
+	http.HandleFunc("/ws", enableCORS(handleWS))
+
+	// CORS preflight
 	http.HandleFunc("/api/", enableCORS(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -45,22 +64,58 @@ func main() {
 		http.NotFound(w, r)
 	}))
 
-	// Отдача статики из frontend/dist
+	// Раздача фронта
 	fs := http.FileServer(http.Dir("./frontend/dist"))
 	http.Handle("/", fs)
 
-	// Порт из переменной окружения (для Render)
+	// 📡 Горутина рассылки WebSocket клиентам
+	go func() {
+		for {
+			names := <-broadcast
+			clientsMu.Lock()
+			for client := range clients {
+				err := client.WriteJSON(names)
+				if err != nil {
+					log.Println("WebSocket write error:", err)
+					client.Close()
+					delete(clients, client)
+				}
+			}
+			clientsMu.Unlock()
+		}
+	}()
+
+	// Порт
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "3300" // fallback для локальной разработки
+		port = "3300"
 	}
-
 	log.Println("Server is running on http://localhost:" + port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
-// --- Handlers ---
+// --- WebSocket Handler ---
+func handleWS(w http.ResponseWriter, r *http.Request) {
+	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("WebSocket upgrade error:", err)
+		return
+	}
 
+	clientsMu.Lock()
+	clients[conn] = true
+	clientsMu.Unlock()
+
+	defer func() {
+		clientsMu.Lock()
+		delete(clients, conn)
+		clientsMu.Unlock()
+		conn.Close()
+	}()
+}
+
+// --- API Handlers ---
 func messageHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method != http.MethodGet {
@@ -93,6 +148,20 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+
+	// После добавления — сразу рассылаем обновлённый список
+	rows, err := db.Query("SELECT id, name, created_at FROM names")
+	if err == nil {
+		var names []Name
+		defer rows.Close()
+		for rows.Next() {
+			var n Name
+			rows.Scan(&n.ID, &n.Name, &n.CreatedAt)
+			names = append(names, n)
+		}
+		go func() { broadcast <- names }()
+	}
+
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "Name saved successfully",
 	})
@@ -161,6 +230,10 @@ func deleteAllHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+
+	// Очистили — отправим пустой список
+	go func() { broadcast <- []Name{} }()
+
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "All names deleted",
 	})

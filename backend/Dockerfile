@@ -1,5 +1,5 @@
 # 1. Сборка фронтенда
-FROM node:20 AS frontend
+FROM node:20 AS frontend-build
 WORKDIR /app/frontend
 
 COPY frontend/package*.json ./
@@ -9,29 +9,25 @@ COPY frontend/ ./
 RUN npm run build
 
 # 2. Сборка Go-бэкенда
-FROM golang:1.22.2 AS backend
+FROM golang:1.22.2 AS backend-build
 WORKDIR /app
 
-# Копируем go.mod и go.sum из корня репозитория
-COPY go.mod go.sum ./
-RUN GOTOOLCHAIN=auto go mod download
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
 
-# Копируем исходники бэкенда
-COPY backend/ ./backend/
+COPY . .
 
-# Копируем собранный фронтенд
-COPY --from=frontend /app/frontend/dist ./frontend/dist
+COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
-# Сборка сервера из backend/, бинарь кладём в /app/server
 RUN cd backend && go build -o ../server .
 
-# 3. Финальный слой (production)
+# 3. Финальный образ
 FROM debian:bookworm-slim
 WORKDIR /app
 
-# Копируем собранный бинарник и фронтенд
-COPY --from=backend /app/server .
-COPY --from=backend /app/frontend/dist ./frontend/dist
+COPY --from=backend-build /app/server .
+COPY --from=backend-build /app/frontend/dist ./frontend/dist
 
 EXPOSE 8080
+
 CMD ["./server"]
